@@ -70,6 +70,7 @@ class Clustering:
         self.graph = graph
         self.total_pr_entropy = sum([entropy1(graph.node[node][PAGE_RANK]) \
                 for node in graph])
+
         self.modules = [Module(module_id, module, graph) \
                 for (module_id, module) in enumerate(modules)]
 
@@ -134,7 +135,7 @@ def main(argv):
     parser = argparse.ArgumentParser(description="Calculate the infomap")
     parser.add_argument('-g', '--graph-filename', type=argparse.FileType('r'),
             help="the .net file to use as the graph", required=True)
-    parser.add_argument('-m', '--module-filename', default="2009_figure3a.mod",
+    parser.add_argument('-m', '--module-filename', type=argparse.FileType('r'),
             help="the .mod file to use as the clustering")
     options = parser.parse_args(argv[1:])
 
@@ -145,7 +146,7 @@ def main(argv):
 
     # If clustering provided, use it.
     try:
-        modules = [line.strip().split() for line in options.graph_filename]
+        modules = [line.strip().split() for line in options.module_filename]
     except IOError:
         print ">>", sys.exc_info()[0]
         print ">> No .mod file provided, or error reading it"
