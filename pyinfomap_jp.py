@@ -23,6 +23,8 @@ class PyInfomap(object):
         self.filename = filename
         self.graph = graph
         self.clustering = clustering
+        self.current_mdl = 999
+        self.num_mdl_calculations = 0
         if self.filename and not self.graph:
             self.load_and_process_graph(self.filename)
 
@@ -68,11 +70,13 @@ class PyInfomap(object):
         """
         modules = [[x] for x in self.graph.nodes()]
         self.clustering = Clustering(self.graph, modules)
+        self.current_mdl = self.get_mdl()
 
     def get_mdl(self):
         """get MDL (map equation) for the current graph/clustering
 
         """
+        self.num_mdl_calculations += 1
         return self.clustering.get_mdl()
 
     def optimize_mdl(self):
@@ -82,19 +86,88 @@ class PyInfomap(object):
         """
         self.try_move_each_node()
 
-    def try_move_each_node(self, current_graph):
+    def try_change_node_module(self, node, new_module_id):
+        """Change a node's module
+
+        :node: node id to change
+        :new_module_id: module_id for the new module
+        :returns: new Clustering, new copy of graph
+
+        """
+        module_config = []
+        for m in self.clustering.modules:
+            this_module_nodes = set(m.nodes)
+            if node in this_module_nodes:
+                this_module_nodes.remove(node)
+            if m.module_id == new_module_id:
+                this_module_nodes.add(node)
+            if this_module_nodes:
+                module_config.append(this_module_nodes)
+        new_graph = self.graph
+        new_graph.node[node]['module_id'] = new_module_id
+        new_clustering = Clustering(self.graph, module_config)
+        return new_clustering, new_graph
+
+
+    def try_move_each_node_once(self, current_graph=None, improvement=False):
         """Try to move each node into the module of its neighbor.
         As in the first phase of the Louvain method
         :returns: TODO
 
         """
-        for node in current_graph.nodes_iter():
-            pass
-        
+        if not current_graph:
+            current_graph = self.graph
 
+        for node in current_graph.nodes_iter():
+            node_module_id = current_graph.node[node]['module_id']
+            for _, nbr in nx.edges_iter(current_graph, node):
+                nbr_module_id = current_graph.node[nbr]['module_id']
+                if node_module_id != nbr_module_id:
+                    new_clustering, new_graph = self.try_change_node_module(node, nbr_module_id)
+                    new_mdl = new_clustering.get_mdl()
+                    self.num_mdl_calculations += 1
+                    if new_mdl < self.current_mdl:
+                        logger.debug('updating best MDL: {:.4f} -> {:.4f}'.format(self.current_mdl, new_mdl))
+                        self.graph = new_graph
+                        self.clustering = new_clustering
+                        self.current_mdl = new_mdl
+                        improvement = True
+        return improvement
+
+    def try_move_each_node_repeatedly(self, current_graph=None):
+        """Try to move each node into the module of its neighbor.
+        As in the first phase of the Louvain method
+        :returns: TODO
+
+        :current_graph: TODO
+        :returns: TODO
+
+        """
+        if not current_graph:
+            current_graph = self.graph
+
+        i = 0
+        while True:
+            i += 1
+            improvement = False
+            old_mdl = self.current_mdl
+            logger.debug('looping through each node: attempt {}'.format(i))
+            improvement = self.try_move_each_node_once(current_graph)
+            if not improvement:
+                break
+
+        
+def test(fname='2009_figure3ab.net'):
+    t = PyInfomap(fname)
+    logger.debug('Initial MDL: {}'.format(t.current_mdl))
+    t.try_move_each_node_repeatedly()
+    logger.debug('final MDL: {}'.format(t.current_mdl))
+    for m in t.clustering.modules:
+        logger.debug("moduleid {}: nodes: {}".format(m.module_id, m.nodes))
+    logger.debug("number of MDL calculations performed: {}".format(t.num_mdl_calculations))
 
 def main(args):
-    pass
+    test(args.filename)
 
 if __name__ == "__main__":
     total_start = timer()
@@ -103,6 +176,7 @@ if __name__ == "__main__":
     logger.info( '{:%Y-%m-%d %H:%M:%S}'.format(datetime.now()) )
     import argparse
     parser = argparse.ArgumentParser(description="python infomap")
+    parser.add_argument("filename", nargs='?', default='2009_figure3ab.net', help="filename for pajek network (.net)")
     parser.add_argument("--debug", action='store_true', help="output debugging info")
     global args
     args = parser.parse_args()
