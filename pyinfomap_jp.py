@@ -1,6 +1,7 @@
 import sys, os, time
 from datetime import datetime
 from timeit import default_timer as timer
+import itertools
 
 import networkx as nx
 from pyinfomap import Clustering
@@ -112,7 +113,12 @@ class PyInfomap(object):
     def try_move_each_node_once(self, current_graph=None, improvement=False):
         """Try to move each node into the module of its neighbor.
         As in the first phase of the Louvain method
-        :returns: TODO
+
+        NOTE: as the clustering changes, module_ids do NOT remain constant.
+        So make sure to check for module_id often
+
+        :returns: improvement (bool): True if the MDL was successfully reduced from
+                                        what it was at the start of the loop
 
         """
         if not current_graph:
@@ -150,11 +156,48 @@ class PyInfomap(object):
         while True:
             i += 1
             improvement = False
-            old_mdl = self.current_mdl
+            #old_mdl = self.current_mdl
             logger.debug('looping through each node: attempt {}'.format(i))
             improvement = self.try_move_each_node_once(current_graph)
             if not improvement:
                 break
+
+    def condense_graph(self, graph):
+        """Make a new graph, where each node represents a cluster of the input graph
+        and edges mean that a node in the cluster links to a node in the other cluster
+        (weighted by number of these connections).
+
+        This is known as a *quotient graph*
+
+        NetworkX has a function nx.quotient_graph, but this does not deal with weighted edges
+        So here is a modified version
+
+        :graph: input graph to condense
+        :returns: new graph
+
+        """
+        from networkx.algorithms.minors import equivalence_classes
+        # define a node relation function to condense nodes
+        module_dict = {n: graph.node[n]['module_id'] for n in graph.nodes_iter()}
+        same_module = lambda u, v: module_dict[u] == module_dict[v]
+
+
+        # make a new graph of the same type as the input graph
+        H = type(graph)()
+        # Compute the blocks of the partition on the nodes of G induced by the
+        # equivalence relation R.
+        H.add_nodes_from(equivalence_classes(graph, same_module))
+        block_pairs = itertools.permutations(H, 2) if H.is_directed() else itertools.combinations(H, 2)
+        for b, c in block_pairs:
+            for u, v in itertools.product(b, c):
+                if graph.has_edge(u, v):
+                    weight = graph[u][v].get('weight', 1.0)
+                    if H.has_edge(b, c):
+                        H[b][c]['weight'] += weight
+                    else:
+                        H.add_edge(b, c, weight=weight)
+        return H
+
 
         
 def test(fname='2009_figure3ab.net'):
@@ -165,6 +208,17 @@ def test(fname='2009_figure3ab.net'):
     for m in t.clustering.modules:
         logger.debug("moduleid {}: nodes: {}".format(m.module_id, m.nodes))
     logger.debug("number of MDL calculations performed: {}".format(t.num_mdl_calculations))
+
+    logger.debug("")
+    H = t.condense_graph(t.graph)
+    H = t.process_graph(H)
+    for n in H.edges_iter(data=True):
+        logger.debug("{}".format(n))
+    modules = [[n] for n in H.nodes()]
+    c = Clustering(H, modules)
+    logger.debug(c.get_mdl())
+    ### SOMETHING IS WRONG, the new graph has higher MDL than the old (expanded) graph
+
 
 def main(args):
     test(args.filename)
