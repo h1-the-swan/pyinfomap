@@ -52,10 +52,15 @@ class PyInfomap(object):
         """
         for node in graph:
             edges = graph.edges(node, data=True)
-            total_weight = sum([data['weight'] for (_, _, data) in edges])
+            try:
+                total_weight = sum([data['weight'] for (_, _, data) in edges])
+            except KeyError:
+                # unweighted
+                total_weight = len(edges)
             for (_, _, data) in edges:
-                data['orig_weight'] = data['weight']
-                data['weight'] = data['weight'] / total_weight
+                edge_weight = float(data.get('weight', 1.))
+                data['orig_weight'] = edge_weight
+                data['weight'] = edge_weight / total_weight
         # Get its PageRank, alpha is 1-tau where [RAB2009 says \tau=0.15]
         page_ranks = nx.pagerank(graph, alpha=1-TAU)
         for (node, page_rank) in page_ranks.items():
@@ -319,10 +324,10 @@ def check_module_id_mismatch(graph, clustering):
         
 def test(fname='2009_figure3ab.net'):
     t = PyInfomap(fname)
-    logger.debug('Initial MDL: {}'.format(t.current_mdl))
+    logger.info('Initial MDL: {}'.format(t.current_mdl))
     # t.try_move_each_node_repeatedly()
     t.find_best_partition()
-    logger.debug('final MDL: {}'.format(t.current_mdl))
+    logger.info('final MDL: {}'.format(t.current_mdl))
     # for m in t.clustering.modules:
     #     logger.debug("moduleid {}: nodes: {}".format(m.module_id, m.nodes))
     # for n in t.graph.nodes(data=True):
