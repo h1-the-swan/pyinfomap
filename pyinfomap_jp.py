@@ -4,6 +4,7 @@ from timeit import default_timer as timer
 import itertools
 
 import networkx as nx
+import numpy as np
 from pyinfomap import Clustering
 
 TAU = 0.15
@@ -32,8 +33,10 @@ class PyInfomap(object):
 
     """Docstring for PyInfomap. """
 
-    def __init__(self, filename=None, graph=None, clustering=None):
+    def __init__(self, filename=None, graph=None, clustering=None, seed=None):
         self.filename = filename
+        self.seed = seed
+        self.randomstate = np.random.RandomState(seed)
         self.graph = graph
         self.clustering = clustering
         self.current_mdl = 999
@@ -142,9 +145,10 @@ class PyInfomap(object):
         else:
             module_config = []
             for m in meta_clustering.modules:
-                for meta_node in m.nodes:
-                    this_module = list(flatten(meta_node))
+                # for meta_node in m.nodes:
+                #     this_module = list(flatten(meta_node))
                 # logger.debug("this_module: {}".format(this_module))
+                this_module = list(flatten(m.nodes))
                 module_config.append(this_module)
             # module_config = current_graph.nodes()  # list of sets of nodes in original graph
             # logger.debug(module_config)
@@ -169,7 +173,8 @@ class PyInfomap(object):
         if not current_clustering:
             current_clustering = self.clustering
 
-        for node in current_graph.nodes_iter():
+        #for node in current_graph.nodes_iter():
+        for node in self.randomstate.permutation(current_graph.nodes()):
             node_module_id = current_graph.node[node]['module_id']
             for _, nbr in nx.edges_iter(current_graph, node):
                 nbr_module_id = current_graph.node[nbr]['module_id']
@@ -185,6 +190,7 @@ class PyInfomap(object):
                         current_clustering = new_clustering
                         node_module_id = current_graph.node[node]['module_id']
                         self.current_mdl = new_mdl
+                        logger.debug(output_clustering(new_clustering))
                         improvement = True
         return current_graph, current_clustering, improvement
 
@@ -277,7 +283,7 @@ class PyInfomap(object):
         num_passes = 0
         while True:
             current_graph, current_clustering, improvement = self.try_move_each_node_repeatedly(current_graph, current_clustering)
-            output_clustering(current_clustering)
+            logger.debug(output_clustering(current_clustering))
             if not improvement:
                 break
 
@@ -307,8 +313,11 @@ class PyInfomap(object):
                     
 
 def output_clustering(clustering):
+    lines = []
     for m in clustering.modules:
-        logger.debug("moduleid {}: nodes: {}".format(m.module_id, m.nodes))
+        #logger.debug("moduleid {}: nodes: {}".format(m.module_id, m.nodes))
+        lines.append("moduleid {}: nodes: {}".format(m.module_id, m.nodes))
+    return '\n'.join(lines)
 
 
 def check_module_id_mismatch(graph, clustering):
@@ -322,8 +331,8 @@ def check_module_id_mismatch(graph, clustering):
     if not err:
         logger.debug("no module id mismatches")
         
-def test(fname='2009_figure3ab.net'):
-    t = PyInfomap(fname)
+def test(fname='2009_figure3ab.net', seed=None):
+    t = PyInfomap(fname, seed=seed)
     logger.info('Initial MDL: {}'.format(t.current_mdl))
     # t.try_move_each_node_repeatedly()
     t.find_best_partition()
@@ -341,7 +350,7 @@ def test(fname='2009_figure3ab.net'):
 
 
 def main(args):
-    test(args.filename)
+    test(args.filename, seed=args.seed)
 
 if __name__ == "__main__":
     total_start = timer()
@@ -351,6 +360,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="python infomap")
     parser.add_argument("filename", nargs='?', default='2009_figure3ab.net', help="filename for pajek network (.net)")
+    parser.add_argument("--seed", type=int, default=None, help="random seed. If not specified, use numpy defaults.")
     parser.add_argument("--debug", action='store_true', help="output debugging info")
     global args
     args = parser.parse_args()
