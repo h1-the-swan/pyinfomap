@@ -443,7 +443,7 @@ class PyInfomap(object):
             for node_idx, node_name in enumerate(nodes):
                 flow = graph.node[node_name][PAGE_RANK]
                 node_id = graph.node[node_name]['id']
-                outstream.write("{}:{} {:.7f} \"{}\" {}\n".format(module_idx, node_idx, flow, node_name, node_id))
+                outstream.write("{}:{} {:.7f} \"{}\" {}\n".format(module_idx+1, node_idx+1, flow, node_name, node_id))
 
         if opened_file:
             outstream.close()
