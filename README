@@ -1,0 +1,21 @@
+# Pyinfomap: Python implementation of [Infomap](http://www.mapequation.org)
+
+Fork of <https://github.com/uwescience/pyinfomap> MDL (map equation calculator)
+
+Updated with algorithm implemented by Jason Portenoy
+
+Uses the Louvain method, iteratively joining modules into super-modules to optimize the map equation.
+
+Requires NetworkX
+
+## Running
+
+Takes a pajek network file (`.net`) as input, and outputs a tree file with the clustering found
+
+`python pyinfomap.py input.net [output-directory] [options]`
+
+This will write a `.tree` file with the same name as the input `.net` file to [output-directory]. If [output-directory] is not specified, it will write to standard out.
+
+-----
+
+`karate.net` taken from <http://networkdata.ics.uci.edu/data/karate/> (renamed from `karate.paj`)
